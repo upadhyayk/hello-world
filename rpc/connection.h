@@ -69,6 +69,7 @@ class tcpsconn {
 	public:
 		tcpsconn(chanmgr *m1, int port, int lossytest=0);
 		~tcpsconn();
+		inline int port() { return port_;}
 
 		void accept_conn();
 	private:
@@ -80,6 +81,7 @@ class tcpsconn {
 		int tcp_; //file desciptor for accepting connection
 		chanmgr *mgr_;
 		int lossy_;
+		int port_; //needed for hw2
 		std::map<int, connection *> conns_;
 
 		void process_accept();
