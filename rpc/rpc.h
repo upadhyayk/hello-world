@@ -153,7 +153,7 @@ rpcc::call_m(unsigned int proc, marshall &req, R & r, TO to)
         fprintf(stderr, "rpcc::call_m: failed to unmarshall the reply."
                 "You are probably calling RPC 0x%x with wrong return "
                 "type.\n", proc);
-        assert(0);
+        VERIFY(0);
         return rpc_const::unmarshal_reply_failure;
     }
 	return intret;
@@ -287,14 +287,14 @@ class rpcs : public chanmgr {
 			buf = NULL;
 			sz = 0;
 		}
-		reply_t (reply_t &rhs) {
+		reply_t (reply_t &&rhs) {
 			if (&rhs == this) {
 				return;
 			}
 			xid = rhs.xid;
 			cb_present = rhs.cb_present;
 			buf = rhs.buf;
-			rhs.buf = NULL;
+			rhs.buf = nullptr;
 			sz = rhs.sz;
 		}
 		unsigned int xid;

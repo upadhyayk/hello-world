@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <cstddef>
 
 #include <map>
 
@@ -42,7 +43,8 @@ class connection : public aio_callback {
 		void incref();
 		void decref();
 		int ref();
-
+                
+                int compare(connection *another);
 	private:
 
 		bool readpdu();
@@ -54,6 +56,8 @@ class connection : public aio_callback {
 
 		charbuf wpdu_;
 		charbuf rpdu_;
+                
+                struct timeval create_time_;
 
 		int waiters_;
 		int refno_;
@@ -69,11 +73,10 @@ class tcpsconn {
 	public:
 		tcpsconn(chanmgr *m1, int port, int lossytest=0);
 		~tcpsconn();
-		inline int port() { return port_;}
-
+                inline int port() { return port_; }
 		void accept_conn();
 	private:
-
+                int port_;
 		pthread_mutex_t m_;
 		pthread_t th_;
 		int pipe_[2];
@@ -81,7 +84,6 @@ class tcpsconn {
 		int tcp_; //file desciptor for accepting connection
 		chanmgr *mgr_;
 		int lossy_;
-		int port_; //needed for hw2
 		std::map<int, connection *> conns_;
 
 		void process_accept();
