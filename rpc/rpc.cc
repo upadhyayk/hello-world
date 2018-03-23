@@ -65,14 +65,11 @@
 #include "slock.h"
 
 #include <sys/types.h>
-#include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
 #include <time.h>
 #include <netdb.h>
-
-#include <algorithm>
-#include <utility>
+#include <unistd.h>
 
 #include "jsl_log.h"
 #include "gettime.h"
@@ -109,7 +106,6 @@ rpcc::rpcc(sockaddr_in d, bool retrans) :
 	VERIFY(pthread_mutex_init(&m_, 0) == 0);
 	VERIFY(pthread_mutex_init(&chan_m_, 0) == 0);
 	VERIFY(pthread_cond_init(&destroy_wait_c_, 0) == 0);
-
 	if(retrans){
 		set_rand_seed();
 		clt_nonce_ = random();
@@ -193,7 +189,6 @@ int
 rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 		TO to)
 {
-
 	caller ca(0, &rep);
         int xid_rep;
 	{
@@ -206,7 +201,7 @@ rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 		}
 
 		if(destroy_wait_){
-            return rpc_const::cancel_failure;
+		  return rpc_const::cancel_failure;
 		}
 
 		ca.xid = xid_++;
@@ -217,7 +212,6 @@ rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 		req.pack_req_header(h);
                 xid_rep = xid_rep_window_.front();
 	}
-
 	TO curr_to;
 	struct timespec now, nextdeadline, finaldeadline; 
 
@@ -228,7 +222,7 @@ rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 	bool transmit = true;
 	connection *ch = NULL;
 
-	while (1){
+	while (1) {
 		if(transmit){
 			get_refconn(&ch);
 			if(ch){
@@ -433,7 +427,6 @@ rpcs::rpcs(unsigned int p1, int count)
 	dispatchpool_ = new ThrPool(6,false);
 
 	listener_ = new tcpsconn(this, port_, lossytest_);
-
 }
 
 rpcs::~rpcs()
@@ -561,7 +554,6 @@ rpcs::dispatch(djob_t *j)
 			// if we don't know about this clt_nonce, create a cleanup object
 			if(reply_window_.find(h.clt_nonce) == reply_window_.end()){
 				VERIFY (reply_window_[h.clt_nonce].size() == 0); // create
-                reply_window_[h.clt_nonce].push_back(reply_t(0));
 				jsl_log(JSL_DBG_2,
 						"rpcs::dispatch: new client %u xid %d chan %d, total clients %d\n", 
 						h.clt_nonce, h.xid, c->channo(), (int)reply_window_.size());
@@ -666,43 +658,42 @@ rpcs::rpcstate_t
 rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
+	
 	ScopedLock rwl(&reply_window_m_);
-    decltype((reply_window_[0])) replys = reply_window_[clt_nonce];
-    rpcs::rpcstate_t ret = rpcs::rpcstate_t::NEW;
-    auto it = replys.begin();
-    if (!replys.empty() && xid <= replys.front().xid) {
-        ret = FORGOTTEN;
-        it = replys.end();
-    }
-    for ( ; it != replys.end(); ++it){
-        if (it->xid == xid){
-            switch (it->cb_present){
-                case true:
-                    *b = it->buf;
-                    *sz = it->sz;
-                    ret = DONE;
-                    break;
-                default:
-                    ret = INPROGRESS;
-            }
-            break;
-        } else if (it->xid > xid) {
-            replys.insert(it, reply_t(xid));
-            ret = NEW;
-            break;
-        }
-    }
-    if (it == replys.end() && NEW == ret) {
-        replys.push_back(reply_t(xid));
-    }
-    while (!replys.empty() && replys.front().xid < xid_rep){
-        free(replys.front().buf);
-        replys.pop_front();
-    }
-	if (replys.empty() || replys.front().xid > xid_rep){
-		replys.push_front(reply_t(xid_rep));
+	std::list<reply_t>::iterator iter;
+	
+	for (iter = reply_window_[clt_nonce].begin(); iter != reply_window_[clt_nonce].end(); ) {
+		if (iter->xid < xid_rep && iter->cb_present) {
+			free(iter->buf);
+			iter = reply_window_[clt_nonce].erase(iter);
+			continue;
+		}	
+		if (xid == iter->xid) {
+			if(iter->cb_present) {
+				*b = iter->buf;
+				*sz = iter->sz;
+				return DONE;
+			} else {
+				return INPROGRESS;
+			}
+		} 	
+		if(reply_window_[clt_nonce].front().xid > xid) 
+			return FORGOTTEN;
+		iter++;
 	}
-	return ret;
+		
+	reply_t reply(xid);
+	for (iter = reply_window_[clt_nonce].begin(); iter != reply_window_[clt_nonce].end(); iter++) {
+		if(iter->xid > xid) {
+			reply_window_[clt_nonce].insert(iter, reply);
+			break;
+		}		
+	}
+	if(iter == reply_window_[clt_nonce].end())
+		reply_window_[clt_nonce].push_back(reply);
+	return NEW;
+	
+        // You fill this in for Lab 1.
 }
 
 // rpcs::dispatch calls add_reply when it is sending a reply to an RPC,
@@ -715,18 +706,19 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
 	ScopedLock rwl(&reply_window_m_);
-    decltype((reply_window_[0])) replys = reply_window_[clt_nonce];
-    std::list<reply_t>::iterator it;
-    for (it = replys.begin(); it != replys.end(); ++it) {
-        if (it->xid == xid){
-            break;
-        }
-    }
-
-    VERIFY(it != replys.end());
-    it->buf = b;
-    it->sz = sz;
-    it->cb_present = true;
+	std::map<unsigned int, std::list<reply_t> >::iterator clt;
+	std::list<reply_t>::iterator iter;
+	clt = reply_window_.find(clt_nonce);
+	if (clt != reply_window_.end()) {
+		for (iter = clt->second.begin(); iter != clt->second.end(); iter++) { 
+			if (iter->xid == xid) {
+				iter->buf = b;
+				iter->sz = sz;
+				iter->cb_present = true;
+				break; 
+			}
+		}
+	}
         // You fill this in for Lab 1.
 }
 

@@ -3,11 +3,11 @@
 
 #include "rpc.h"
 #include <arpa/inet.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
+#include <unistd.h>
 #include "jsl_log.h"
 #include "gettime.h"
 #include "lang/verify.h"
